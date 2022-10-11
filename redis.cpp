@@ -7,14 +7,6 @@ private:
     string value;
     long long ttl;
 public:
-    Value(string value, int ttl) {
-        this->value = value;
-        this->ttl = ttl;
-    }
-    Value(string value) {
-        this->value = value;
-        ttl = -1;
-    }
     string getValue() { return this->value; }
     void setValue(string value) { this->value = value; }
 
@@ -42,20 +34,23 @@ void printKVStore(RedisCache &cache) {
         cout<<it.first;
         int rem = 30 - it.first.size();
         for(int space = 0; space < rem; space++) cout<<" ";
-        cout<<it.second<<"\n";
+        cout<<it.second.getValue()<<"\n";
     }
     cout<<"\n";
 }
 
 void setEntry(RedisCache &cache, string key, string value) {
     unordered_map<string, Value> kvStore = cache.getKVStore();
-    kvStore[key] = value;
+    Value v;
+    v.setValue(value);
+    v.setTTL(-1);
+    kvStore[key] = v;
     cache.setKVStore(kvStore);
 }
 
 string getEntry(RedisCache &cache, string key) {
     unordered_map<string, Value> kvStore = cache.getKVStore();
-    if(kvStore.find(key) != kvStore.end()) return kvStore[key];
+    if(kvStore.find(key) != kvStore.end()) return kvStore[key].getValue();
     return "(nil)";
 }
 
