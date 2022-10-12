@@ -26,6 +26,41 @@ public:
     void setKVStore(unordered_map<string, Value> kvStore) { this->kvStore = kvStore;}
 };
 
+class Timer {
+public:
+    Timer(size_t time, const std::function<void(RedisCache &, string)>& f, RedisCache &cache, string key) : time{std::chrono::milliseconds{time}}, f{f}, cache{cache}, key(key) {}
+    ~Timer() { wait_thread.join(); }
+
+private:
+    void wait_then_call(RedisCache &cache, string key)
+    {
+        std::unique_lock<std::mutex> lck{mtx};
+        for(int i{10}; i > 0; --i) {
+            cv.wait_for(lck, time / 10);
+        }
+        f(cache, key);
+    }
+    std::mutex mtx;
+    std::condition_variable cv{};
+    std::chrono::milliseconds time;
+    std::function <void(RedisCache &, string)> f;
+    std::thread wait_thread{[this]() {wait_then_call(cache, key); }};
+    RedisCache cache;
+    string key;
+};
+
+void func(RedisCache &cache, string key) {
+    unordered_map<string, Value> kvStore = cache.getKVStore();
+    int ttl = kvStore[key].getTTL();
+    string value = kvStore[key].getValue();
+    ttl--;
+    if(ttl > 0) {
+        kvStore[key].setTTL(ttl);
+        cache.setKVStore(kvStore);
+        Timer t{1000, func, cache, key};
+    }
+}
+
 void printKVStore(RedisCache &cache) {
     unordered_map<string, Value> kvStore = cache.getKVStore();
     cout<<"----------------- REDIS CACHE -----------------\n";
@@ -134,6 +169,21 @@ int main() {
             if(commandCompents.size() == 2) {
                 string key = commandCompents[1];
                 cout<<deleteEntry(cache, key)<<"\n";
+            }
+            else {
+                errorFlag = true;
+            }
+        }
+        else if(commandName == "EXPIRE") {
+            if(commandCompents.size() == 3) {
+                string key = commandCompents[1];
+                int expiry_time = stoi(commandCompents[2]);
+
+                unordered_map<string, Value> kvStore = cache.getKVStore();
+                kvStore[key].setTTL(expiry_time);
+                cache.setKVStore(kvStore);
+                // Timer t{10000,func, cache, key};
+                func(cache, key);
             }
             else {
                 errorFlag = true;
